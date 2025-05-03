@@ -3,6 +3,8 @@ const User = require("../models/user");
 const jwt =require("jsonwebtoken");
 const Book = require("../models/book");
 const { authenticateToken } = require("./userAuth");
+const { transliterate } = require("transliteration");
+
 
 //add book-admin
 router.post("/add-book",authenticateToken,async(req,res)=>{
@@ -125,4 +127,69 @@ router.get("/get-book-by-id/:id",async(req,res)=>{
     }
 
 });
-module.exports = router;
+
+// Search books by title, author, or language
+// Search books by title, author, or language with exact matches first
+router.get("/search-books", async (req, res) => {
+    try {
+        const { query } = req.query;
+        if (!query || !query.trim()) {
+            return res.status(400).json({ status: "error", message: "Search query is required", data: [] });
+        }
+
+        const q = query.trim();
+        const t = transliterate(q);
+
+        console.log(`Original query: ${q}, Transliteration: ${t}`);
+
+        // Build regexes
+        const reQ = new RegExp(q, "i");
+        const reT = new RegExp(t, "i");
+        const reExactQ = new RegExp(`^${q}$`, "i");
+        const reExactT = new RegExp(`^${t}$`, "i");
+
+        // Aggregation pipeline for searching
+        const books = await Book.aggregate([
+            { 
+                $match: {
+                    $or: [
+                        { title: { $regex: reQ } },
+                        { author: { $regex: reQ } },
+                        { language: { $regex: reQ } },
+                        { title: { $regex: reT } },
+                        { author: { $regex: reT } },
+                    ]
+                }
+            },
+            { 
+                $addFields: {
+                    score: {
+                        $switch: {
+                            branches: [
+                                { case: { $regexMatch: { input: "$title", regex: reExactQ } }, then: 100 },
+                                { case: { $regexMatch: { input: "$title", regex: reExactT } }, then: 90 },
+                                { case: { $regexMatch: { input: "$author", regex: reExactQ } }, then: 80 },
+                                { case: { $regexMatch: { input: "$author", regex: reExactT } }, then: 70 },
+                                { case: { $regexMatch: { input: "$title", regex: reQ } }, then: 60 },
+                                { case: { $regexMatch: { input: "$title", regex: reT } }, then: 50 },
+                                { case: { $regexMatch: { input: "$author", regex: reQ } }, then: 40 },
+                                { case: { $regexMatch: { input: "$author", regex: reT } }, then: 30 },
+                                { case: { $regexMatch: { input: "$language", regex: reQ } }, then: 20 },
+                            ],
+                            default: 0
+                        }
+                    }
+                }
+            },
+            { $sort: { score: -1, title: 1 } }
+        ]);
+
+        res.json({ status: "success", data: books });
+
+    } catch (error) {
+        console.error("Error searching books:", error);
+        res.status(500).json({ status: "error", message: "Internal Server Error", data: [] });
+    }
+});
+
+  module.exports = router;

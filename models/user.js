@@ -12,10 +12,19 @@ const user = new mongoose.Schema({
         unique:true,
 
     },
+
+    contact: {
+        type: String,
+        required: true,
+        unique: true,
+        match: [/^\d{11}$/, "Please enter a valid 11-digit phone number"],
+    },
+    
     password:{
         type: String,
         required:true,
     },
+
     address:{
         type: String,
         required:true,

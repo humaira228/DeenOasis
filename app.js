@@ -4,24 +4,48 @@ const cors = require("cors");
 require("dotenv").config();
 require("./conn/conn");
 
+// Middleware
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Enhanced CORS configuration
+const corsOptions = {
+  origin: process.env.FRONTEND_URL || "http://localhost:5173",
+  methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+  credentials: true,
+  optionsSuccessStatus: 204
+};
+app.use(cors(corsOptions));
+
+// Routes
 const User = require("./routes/user");
 const Books = require("./routes/book");
 const Favourite = require("./routes/favourite");
 const Cart = require("./routes/cart");
 const Order = require("./routes/order");
-app.use(cors());
-//app.get("/",(req,res)=>{
-  //  res.send("hello from backend side");
-//});
-//routes
-app.use("/api/v1",User);
-app.use("/api/v1",Books);
-app.use("/api/v1",Favourite);
-app.use("/api/v1",Cart);
-app.use("/api/v1",Order);
 
-//creating port
-app.listen(process.env.PORT, () => {
-    console.log(`Server Started at port ${process.env.PORT}`);
+app.use("/api/v1", User);
+app.use("/api/v1", Books);
+app.use("/api/v1", Favourite);
+app.use("/api/v1", Cart);
+app.use("/api/v1", Order);
+
+// Health check endpoint
+app.get("/api/health", (req, res) => {
+  res.status(200).json({ status: "healthy" });
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ 
+    status: "error",
+    message: "Internal Server Error" 
+  });
+});
+
+// Start server
+const PORT = process.env.PORT || 1000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
