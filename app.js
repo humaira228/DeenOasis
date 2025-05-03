@@ -8,13 +8,26 @@ require("./conn/conn");
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Enhanced CORS configuration
+// ✅ Enhanced CORS Configuration — supports multiple allowed origins
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://wonderful-mousse-eb994f.netlify.app"
+];
+
 const corsOptions = {
-  origin: process.env.FRONTEND_URL || "http://localhost:5173",
+  origin: function (origin, callback) {
+    // allow requests with no origin (like curl or Postman)
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("CORS policy does not allow this origin: " + origin));
+    }
+  },
   methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
   credentials: true,
   optionsSuccessStatus: 204
 };
+
 app.use(cors(corsOptions));
 
 // Routes
@@ -38,9 +51,9 @@ app.get("/api/health", (req, res) => {
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ 
+  res.status(500).json({
     status: "error",
-    message: "Internal Server Error" 
+    message: "Internal Server Error"
   });
 });
 
