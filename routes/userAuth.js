@@ -1,28 +1,23 @@
-// routes/userAuth.js
 const jwt = require("jsonwebtoken");
 
 const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers["authorization"];
-  const token      = authHeader && authHeader.split(" ")[1];
+  const authHeader = req.headers["authorization"]; // Get 'Authorization' header
+  const token = authHeader && authHeader.split(" ")[1]; // Extract token
 
   if (!token) {
     return res.status(401).json({ message: "Authentication token required" });
   }
 
-  const secret = process.env.JWT_SECRET || "bookStore123";
-  jwt.verify(token, secret, (err, payload) => {
+  jwt.verify(token, "bookStore123", (err, user) => {
     if (err) {
-      console.error("JWT Verification Error:", err.message);
+      console.error("JWT Verification Error:", err.message); // Log error for debugging
       return res
         .status(403)
-        .json({ message: "Invalid or expired token" });
+        .json({ message: "Token expired. Please sign in again" });
     }
-    // Expect your login route to sign with: { id: user._id, role: user.role }
-    req.user = {
-      id:   payload.id   || payload.sub,
-      role: payload.role || (payload.authClaims && payload.authClaims.find(c => c.role).role)
-    };
-    next();
+
+    req.user = user; // Attach user data to the request
+    next(); // Proceed to the next middleware
   });
 };
 

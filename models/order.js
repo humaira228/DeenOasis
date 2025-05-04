@@ -1,37 +1,31 @@
 // server/models/order.js
 const mongoose = require("mongoose");
 
-const orderSchema = new mongoose.Schema(
+const order = new mongoose.Schema(
   {
     user: {
       type: mongoose.Types.ObjectId,
-      ref: "User",
+      ref: "user",           // unchanged
       required: true
     },
-    items: [{
-      book: {
-        type: mongoose.Types.ObjectId,
-        ref: "Book",
-        required: true
-      },
-      quantity: {
-        type: Number,
-        required: true,
-        min: 1
-      }
-    }],
-    delivery: {
+    book: {
+      type: mongoose.Types.ObjectId,
+      ref: "books",          // unchanged
+      required: true
+    },
+    quantity: {              // newly added
+      type: Number,
+      required: true,
+      min: 1
+    },
+    delivery: {              // newly added
       type: String,
       enum: ["inside", "outside"],
       required: true
     },
-    rentalDuration: {
+    rentalDuration: {        // newly added
       type: Number,
       enum: [7, 10, 20],
-      required: true
-    },
-    total: {
-      type: Number,
       required: true
     },
     status: {
@@ -43,4 +37,4 @@ const orderSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports = mongoose.model("Order", orderSchema);
+module.exports = mongoose.model("order", order);

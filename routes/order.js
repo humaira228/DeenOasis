@@ -1,110 +1,91 @@
+// server/routes/orders.js
 const router = require("express").Router();
 const { authenticateToken } = require("./userAuth");
+const Book = require("../models/book");
 const Order = require("../models/order");
-const User  = require("../models/user");
+const User = require("../models/user");
 
-// Place order
+// place order
 router.post("/place-order", authenticateToken, async (req, res) => {
   try {
-    const userId = req.user.id;
-    const items = req.body.order;           // expects front-end to send { order: [...] }
-    const { delivery, rentalDuration, total } = req.body;
+    const { id } = req.headers;
+    const { order, delivery, rentalDuration } = req.body;
 
-    if (!Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ message: "Cart is empty" });
+    for (const orderData of order) {
+      // use the payload’s bookId and quantity fields
+      const newOrder = new Order({
+        user: id,
+        book: orderData.bookId,
+        quantity: orderData.quantity,
+        delivery,
+        rentalDuration
+      });
+      const orderDataFromDb = await newOrder.save();
+
+      // saving Order in user model & clearing cart
+      await User.findByIdAndUpdate(id, {
+        $push: { orders: orderDataFromDb._id },
+        $pull: { cart: orderData.bookId }
+      });
     }
-
-    const order = new Order({
-      user: userId,
-      items: items.map(({ bookId, quantity }) => ({
-        book: bookId,
-        quantity
-      })),
-      delivery,
-      rentalDuration,
-      total,
-      status: "Order Placed"
-    });
-
-    await order.save();
-
-    // Clear cart and append to user orders
-    await User.findByIdAndUpdate(userId, {
-      $set: { cart: [] },
-      $push: { orders: order._id }
-    });
 
     return res.json({
       status: "Success",
-      message: "Order Placed Successfully",
-      data: order
+      message: "Order Placed Successfully"
     });
   } catch (error) {
-    console.error(error);
+    console.log(error);
     return res.status(500).json({ message: "An Error Occurred" });
   }
 });
 
-// Get order history
+// get order history of a particular user
 router.get("/get-order-history", authenticateToken, async (req, res) => {
   try {
-    const userId = req.user.id;
-    const orders = await Order.find({ user: userId })
-      .populate("items.book")
-      .sort({ createdAt: -1 });
-
+    const { id } = req.headers;
+    const userData = await User.findById(id).populate({
+      path: "orders",
+      populate: { path: "book" }
+    });
+    const orderData = userData.orders.reverse();
     return res.json({
       status: "Success",
-      data: orders
+      data: orderData
     });
   } catch (error) {
-    console.error(error);
+    console.log(error);
     return res.status(500).json({ message: "An Error Occurred" });
   }
 });
 
-// Admin: get all orders
+// get all orders (admin)
 router.get("/get-all-orders", authenticateToken, async (req, res) => {
   try {
-    if (req.user.role !== "admin") {
-      return res.status(403).json({ message: "Admin access required" });
-    }
-
-    const orders = await Order.find()
-      .populate("items.book")
-      .populate("user", "username email")
+    const userData = await Order.find()
+      .populate({ path: "book" })
+      .populate({ path: "user" })
       .sort({ createdAt: -1 });
-
     return res.json({
       status: "Success",
-      data: orders
+      data: userData
     });
   } catch (error) {
-    console.error(error);
+    console.log(error);
     return res.status(500).json({ message: "An Error Occurred" });
   }
 });
 
-// Admin: update status
+// update order status (admin)
 router.put("/update-status/:id", authenticateToken, async (req, res) => {
   try {
-    if (req.user.role !== "admin") {
-      return res.status(403).json({ message: "Admin access required" });
-    }
-
-    const order = await Order.findByIdAndUpdate(
-      req.params.id,
-      { status: req.body.status },
-      { new: true }
-    );
-
+    const { id } = req.params;
+    await Order.findByIdAndUpdate(id, { status: req.body.status });
     return res.json({
       status: "Success",
-      message: "Order status updated",
-      data: order
+      message: "Status Updated Successfully"
     });
   } catch (error) {
-    console.error(error);
+    console.log(error);
     return res.status(500).json({ message: "An Error Occurred" });
   }
 });
