@@ -1,4 +1,3 @@
-// app.js
 const express = require("express");
 const cors    = require("cors");
 require("dotenv").config();
@@ -29,12 +28,12 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
-// Mount your routes (each file still contains its own auth checks where needed)
-app.use("/api/v1", require("./routes/user"));      // sign-up, sign-in, profile, etc.
-app.use("/api/v1", require("./routes/book"));      // book CRUD + transliteration + search
+// Mount routes
+app.use("/api/v1", require("./routes/user"));      // auth & profile
+app.use("/api/v1", require("./routes/book"));      // book CRUD & search
 app.use("/api/v1", require("./routes/favourite")); // favourites
-app.use("/api/v1", require("./routes/cart"));      // cart management
-app.use("/api/v1", require("./routes/order"));     // order placement & history
+app.use("/api/v1", require("./routes/cart"));      // cart
+app.use("/api/v1", require("./routes/order"));     // orders
 
 // Health check
 app.get("/api/health", (req, res) => {

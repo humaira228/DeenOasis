@@ -1,4 +1,3 @@
-// server/routes/order.js
 const router = require("express").Router();
 const { authenticateToken } = require("./userAuth");
 const Order = require("../models/order");
@@ -8,8 +7,7 @@ const User  = require("../models/user");
 router.post("/place-order", authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
-    // front-end sends `order` array
-    const items = req.body.order || req.body.items;
+    const items = req.body.order;           // expects front-end to send { order: [...] }
     const { delivery, rentalDuration, total } = req.body;
 
     if (!Array.isArray(items) || items.length === 0) {
@@ -65,7 +63,7 @@ router.get("/get-order-history", authenticateToken, async (req, res) => {
   }
 });
 
-// Admin routes
+// Admin: get all orders
 router.get("/get-all-orders", authenticateToken, async (req, res) => {
   try {
     if (req.user.role !== "admin") {
@@ -87,6 +85,7 @@ router.get("/get-all-orders", authenticateToken, async (req, res) => {
   }
 });
 
+// Admin: update status
 router.put("/update-status/:id", authenticateToken, async (req, res) => {
   try {
     if (req.user.role !== "admin") {
