@@ -1,67 +1,76 @@
+// server/routes/cart.js
 const router = require("express").Router();
 const User = require("../models/user"); 
 const { authenticateToken } = require("./userAuth");
 
-//put to cart
-router.put("/add-to-cart",authenticateToken, async(req,res)=>{
-    try{
-        const {bookid,id} = req.headers;
-        const userData = await User.findById(id);
-        const isBookinCart = userData.cart.includes(bookid);
-        if(isBookinCart){
-            return res.json({
-                status:"Success",
-                message:"Book is already in cart",
+// Add to cart with quantity
+router.put("/add-to-cart", authenticateToken, async (req, res) => {
+    try {
+        const { bookId, quantity } = req.body;
+        const { id } = req.headers;
+
+        const user = await User.findById(id);
+        const existingItem = user.cart.find(item => item.book.toString() === bookId);
+
+        if (existingItem) {
+            existingItem.quantity += quantity || 1;
+        } else {
+            user.cart.push({ 
+                book: bookId, 
+                quantity: quantity || 1 
             });
         }
-        await User.findByIdAndUpdate(id,{
-            $push:{cart: bookid},
-        });
-        return res.json({
-            status:"Success",
-            message:"Book added to Cart",
-        });
-    }catch(error){
-        console.log(error);
-        return res.status(500).json({message:"An Error Occurred"});
-    }
 
-});
-//remove from cart
-router.put("/remove-from-cart/:bookid",authenticateToken, async(req,res)=>{
-    try{
-        const {bookid} = req.params;
-        const {id} = req.headers;
-        await User.findByIdAndUpdate(id,{
-            $pull:{cart: bookid},
-        });
+        await user.save();
         return res.json({
-            status:"Success",
-            message:"Book removed from Cart",
+            status: "Success",
+            message: "Cart updated",
+            data: user.cart
         });
-    }catch(error){
+    } catch (error) {
         console.log(error);
-        return res.status(500).json({message:"An Error Occurred"});
+        return res.status(500).json({ message: "An Error Occurred" });
     }
-
 });
 
-//get cart of a particular user
-router.get("/get-user-cart",authenticateToken, async(req,res)=>{
-    try{
-        const {id} = req.headers;
-        const userData=await User.findById(id).populate("cart");
-        const cart= userData.cart.reverse();
+// Remove from cart
+router.put("/remove-from-cart/:bookId", authenticateToken, async (req, res) => {
+    try {
+        const { bookId } = req.params;
+        const { id } = req.headers;
+
+        await User.findByIdAndUpdate(id, {
+            $pull: { cart: { book: bookId } }
+        });
 
         return res.json({
-            status:"Success",
-            data:cart,
+            status: "Success",
+            message: "Item removed from cart"
         });
-    }catch(error){
+    } catch (error) {
         console.log(error);
-        return res.status(500).json({message:"An Error Occurred"});
+        return res.status(500).json({ message: "An Error Occurred" });
     }
+});
 
+// Get user cart with populated data
+router.get("/get-user-cart", authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.headers;
+        const user = await User.findById(id)
+            .populate({
+                path: "cart.book",
+                model: "Book"
+            });
+
+        return res.json({
+            status: "Success",
+            data: user.cart.reverse()
+        });
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({ message: "An Error Occurred" });
+    }
 });
 
 module.exports = router;
