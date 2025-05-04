@@ -11,9 +11,10 @@ const sendError = (res, message, code = 500) => {
 
 // Utility to check if user is admin
 const ensureAdmin = async (req, res) => {
-  const user = await User.findById(req.headers.id);
+  const user = await User.findById(req.user.id);
   if (!user || user.role !== "admin") {
-    return res.status(403).json({ status: "error", message: "Admin access required", data: [] });
+    sendError(res, "Admin access required", 403);
+    return null;
   }
   return user;
 };
@@ -24,9 +25,23 @@ router.post("/add-book", authenticateToken, async (req, res) => {
     const admin = await ensureAdmin(req, res);
     if (!admin) return;
 
-    const { url, title, author, price, desc, language } = req.body;
+    const { url, title, author, price, desc, language, availableStock = 0 } = req.body;
 
-    const book = new Book({ url, title, author, price, desc, language });
+    // Generate Bengali transliterations
+    const transliteratedTitle = transliterate(title, { from: "devanagari", to: "beng" });
+    const transliteratedAuthor = transliterate(author, { from: "devanagari", to: "beng" });
+
+    const book = new Book({
+      url,
+      title,
+      author,
+      price,
+      desc,
+      language,
+      availableStock,
+      transliteratedTitle,
+      transliteratedAuthor
+    });
     await book.save();
 
     res.status(200).json({ status: "success", message: "Book added successfully", data: book });
@@ -42,11 +57,21 @@ router.put("/update-book/:id", authenticateToken, async (req, res) => {
     const admin = await ensureAdmin(req, res);
     if (!admin) return;
 
-    const { id } = req.params;
-    const updatedBook = await Book.findByIdAndUpdate(id, req.body, { new: true });
+    const updateFields = { ...req.body };
+    if (req.body.title) {
+      updateFields.transliteratedTitle = transliterate(req.body.title, { from: "devanagari", to: "beng" });
+    }
+    if (req.body.author) {
+      updateFields.transliteratedAuthor = transliterate(req.body.author, { from: "devanagari", to: "beng" });
+    }
 
+    const updatedBook = await Book.findByIdAndUpdate(
+      req.params.id,
+      updateFields,
+      { new: true, runValidators: true }
+    );
     if (!updatedBook) {
-      return res.status(404).json({ status: "error", message: "Book not found", data: [] });
+      return sendError(res, "Book not found", 404);
     }
 
     res.status(200).json({ status: "success", message: "Book updated successfully", data: updatedBook });
@@ -62,11 +87,9 @@ router.delete("/delete-book/:id", authenticateToken, async (req, res) => {
     const admin = await ensureAdmin(req, res);
     if (!admin) return;
 
-    const { id } = req.params;
-    const deletedBook = await Book.findByIdAndDelete(id);
-
+    const deletedBook = await Book.findByIdAndDelete(req.params.id);
     if (!deletedBook) {
-      return res.status(404).json({ status: "error", message: "Book not found", data: [] });
+      return sendError(res, "Book not found", 404);
     }
 
     res.status(200).json({ status: "success", message: "Book deleted successfully", data: deletedBook });
@@ -103,48 +126,40 @@ router.get("/search-books", async (req, res) => {
   try {
     const { query } = req.query;
     if (!query || !query.trim()) {
-      return res.status(400).json({ status: "error", message: "Search query is required", data: [] });
+      return sendError(res, "Search query is required", 400);
     }
 
     const q = query.trim();
-    const t = transliterate(q);
+    const beng = transliterate(q, { from: "devanagari", to: "beng" });
     const reQ = new RegExp(q, "i");
-    const reT = new RegExp(t, "i");
-    const reExactQ = new RegExp(`^${q}$`, "i");
-    const reExactT = new RegExp(`^${t}$`, "i");
+    const reB = new RegExp(beng, "i");
+    const reT = new RegExp(transliterate(q, { from: "devanagari", to: "itrans" }), "i");
 
+    // Aggregate with scoring
     const books = await Book.aggregate([
-      {
-        $match: {
+      { $match: {
           $or: [
-            { title: { $regex: reQ } },
-            { author: { $regex: reQ } },
-            { language: { $regex: reQ } },
-            { title: { $regex: reT } },
-            { author: { $regex: reT } },
+            { title: reQ },
+            { transliteratedTitle: reB },
+            { author: reQ },
+            { transliteratedAuthor: reB },
+            { language: reQ }
           ]
-        }
-      },
-      {
-        $addFields: {
+      }},
+      { $addFields: {
           score: {
             $switch: {
               branches: [
-                { case: { $regexMatch: { input: "$title", regex: reExactQ } }, then: 100 },
-                { case: { $regexMatch: { input: "$title", regex: reExactT } }, then: 90 },
-                { case: { $regexMatch: { input: "$author", regex: reExactQ } }, then: 80 },
-                { case: { $regexMatch: { input: "$author", regex: reExactT } }, then: 70 },
-                { case: { $regexMatch: { input: "$title", regex: reQ } }, then: 60 },
-                { case: { $regexMatch: { input: "$title", regex: reT } }, then: 50 },
-                { case: { $regexMatch: { input: "$author", regex: reQ } }, then: 40 },
-                { case: { $regexMatch: { input: "$author", regex: reT } }, then: 30 },
-                { case: { $regexMatch: { input: "$language", regex: reQ } }, then: 20 },
+                { case: { $regexMatch: { input: "$title", regex: reQ } }, then: 100 },
+                { case: { $regexMatch: { input: "$transliteratedTitle", regex: reB } }, then: 90 },
+                { case: { $regexMatch: { input: "$author", regex: reQ } }, then: 80 },
+                { case: { $regexMatch: { input: "$transliteratedAuthor", regex: reB } }, then: 70 },
+                { case: { $regexMatch: { input: "$language", regex: reQ } }, then: 60 }
               ],
               default: 0
             }
           }
-        }
-      },
+      }},
       { $sort: { score: -1, title: 1 } }
     ]);
 
@@ -156,15 +171,12 @@ router.get("/search-books", async (req, res) => {
 });
 
 // 📖 Get Single Book by ID
-router.get("/get-book-by-id/:id", async (req, res) => {
+router.get("/get-book-by-id/:id", authenticateToken, async (req, res) => {
   try {
-    const { id } = req.params;
-    const book = await Book.findById(id);
-
+    const book = await Book.findById(req.params.id);
     if (!book) {
-      return res.status(404).json({ status: "error", message: "Book not found", data: [] });
+      return sendError(res, "Book not found", 404);
     }
-
     res.status(200).json({ status: "success", message: "Book fetched successfully", data: book });
   } catch (error) {
     console.error("Error fetching book by ID:", error);

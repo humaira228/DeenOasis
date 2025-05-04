@@ -1,22 +1,22 @@
+// app.js
 const express = require("express");
-const app = express();
-const cors = require("cors");
+const cors    = require("cors");
 require("dotenv").config();
-require("./conn/conn");
+require("./conn/conn"); // MongoDB connection
 
-// Middleware
+const app = express();
+
+// Body parsers
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ✅ Enhanced CORS Configuration — supports multiple allowed origins
+// CORS configuration
 const allowedOrigins = [
   "http://localhost:5173",
   "https://wonderful-mousse-eb994f.netlify.app"
 ];
-
 const corsOptions = {
-  origin: function (origin, callback) {
-    // allow requests with no origin (like curl or Postman)
+  origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -27,31 +27,29 @@ const corsOptions = {
   credentials: true,
   optionsSuccessStatus: 204
 };
-
 app.use(cors(corsOptions));
 
-// Routes
-app.use("/api/v1", require("./routes/user"));      // auth, profile, etc.
-app.use("/api/v1", require("./routes/book"));      // book CRUD + search
-app.use("/api/v1", require("./routes/favourite")); // favourite books
-app.use("/api/v1", require("./routes/cart"));      // cart routes (fixed below)
-app.use("/api/v1", require("./routes/order"));     // order routes (fixed below)
+// Mount your routes (each file still contains its own auth checks where needed)
+app.use("/api/v1", require("./routes/user"));      // sign-up, sign-in, profile, etc.
+app.use("/api/v1", require("./routes/book"));      // book CRUD + transliteration + search
+app.use("/api/v1", require("./routes/favourite")); // favourites
+app.use("/api/v1", require("./routes/cart"));      // cart management
+app.use("/api/v1", require("./routes/order"));     // order placement & history
 
-// Health check endpoint
+// Health check
 app.get("/api/health", (req, res) => {
   res.status(200).json({ status: "healthy" });
 });
 
-// Error handling middleware
+// Central error handler
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({
     status: "error",
-    message: "Internal Server Error"
+    message: err.message
   });
 });
 
-// Start server
 const PORT = process.env.PORT || 1000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
